@@ -11,8 +11,8 @@
 #define BUF_SIZE 256
 #define ARRAY_SIZE 10
 #define TRIES 5
-TCHAR szName[] = TEXT("Global\\Data");
-InterProcessCS* optex;
+WCHAR fileOfValuesName[] = L"Global\\Data";
+InterProcessCS* ics;
 
 void ProcessProcedure()
 {
@@ -22,7 +22,7 @@ void ProcessProcedure()
 	hMap = OpenFileMapping(
 		FILE_MAP_ALL_ACCESS,
 		FALSE,
-		szName);
+		fileOfValuesName);
 
 	int* values = (int*)MapViewOfFile(hMap,
 		FILE_MAP_ALL_ACCESS,
@@ -33,7 +33,7 @@ void ProcessProcedure()
 
 	for (int j = 0; j < TRIES; j++)
 	{
-		optex->Enter();
+		ics->Enter();
 		for (int i = 0; i < ARRAY_SIZE; i++)
 		{
 			values[i] = values[i] + 1;
@@ -43,7 +43,7 @@ void ProcessProcedure()
 			printf("%d ", values[i]);
 		}
 		printf("\n%d\n", GetCurrentProcessId());
-		optex->Leave();
+		ics->Leave();
 		Sleep(10);
 	}
 
@@ -54,7 +54,7 @@ void ProcessProcedure()
 
 int wmain(int argc, wchar_t *argv[])
 {
-	    optex = new InterProcessCS(L"Cross", 0);
+	    ics = new InterProcessCS("Cross", 0);
 		if (argc == 1)
 		{
 			HANDLE hMapFile;
@@ -66,7 +66,7 @@ int wmain(int argc, wchar_t *argv[])
 				PAGE_READWRITE,          
 				0,                      
 				BUF_SIZE,                
-				szName);                 
+				fileOfValuesName);
 	
 			if (hMapFile == NULL)
 			{
@@ -119,7 +119,6 @@ int wmain(int argc, wchar_t *argv[])
 		else
 		{ 
 			ProcessProcedure();
-			getch();
 			return 0;
 		}
 

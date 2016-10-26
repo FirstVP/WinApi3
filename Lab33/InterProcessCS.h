@@ -2,7 +2,7 @@
 #include "windows.h"
 class InterProcessCS {
 public:
-	InterProcessCS(PCWSTR pszName, DWORD dwSpinCount);
+	InterProcessCS(char* pszName, DWORD dwSpinCount);
 	~InterProcessCS();
 	void SetSpinCount(DWORD dwSpinCount);
 	void Enter();
@@ -19,6 +19,6 @@ private:
 	HANDLE m_hfm;
 	PSHAREDINFO m_psi;
 private:
-	PSTR ConstructObjectName(PSTR pszResult,
-		PCSTR pszPrefix, PCWSTR pszName);
+	char* ConstructObjectName(char* pszResult,
+		char* pszPrefix, char* pszName);
 };

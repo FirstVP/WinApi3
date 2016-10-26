@@ -2,14 +2,14 @@
 #include "InterProcessCS.h"
 #include "stdio.h"
 #define BUFFER_OBJECT_NAME_SIZE 256
-PSTR InterProcessCS::ConstructObjectName(PSTR pszResult,
-	PCSTR pszPrefix, PCWSTR pszName) {
+char* InterProcessCS::ConstructObjectName(char* pszResult,
+	char* pszPrefix, char* pszName) {
 	pszResult[0] = 0;
-	wsprintfA(pszResult, "%s%S", pszPrefix, pszName);
+	wsprintfA(pszResult, "%s%s", pszPrefix, pszName);
 	return(pszResult);
 }
 
-InterProcessCS::InterProcessCS(PCWSTR pszName, DWORD dwSpinCount) {
+InterProcessCS::InterProcessCS(char* pszName, DWORD dwSpinCount) {
 	char szResult[BUFFER_OBJECT_NAME_SIZE];
 	ConstructObjectName(szResult, "EVENT", pszName);
 	m_hevt = CreateEventA(NULL, FALSE, FALSE, szResult);
@@ -35,8 +35,8 @@ InterProcessCS::~InterProcessCS()
 
 void InterProcessCS::SetSpinCount(DWORD dwSpinCount)
 {
-		InterlockedExchangePointer((void**)&m_psi->m_dwSpinCount,
-		(void*)(DWORD*)dwSpinCount);
+	InterlockedExchange(&m_psi->m_dwSpinCount,
+		(LONG)dwSpinCount);
 }
 
 void InterProcessCS::Enter() {
