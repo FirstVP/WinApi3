@@ -24,7 +24,7 @@
     <ClInclude Include="targetver.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
-    <ClInclude Include="Optex.h">
+    <ClInclude Include="InterProcessCS.h">
       <Filter>Заголовочные файлы</Filter>
     </ClInclude>
   </ItemGroup>
@@ -35,7 +35,7 @@
     <ClCompile Include="Lab33.cpp">
       <Filter>Файлы исходного кода</Filter>
     </ClCompile>
-    <ClCompile Include="Optex.cpp">
+    <ClCompile Include="InterProcessCS.cpp">
       <Filter>Файлы исходного кода</Filter>
     </ClCompile>
   </ItemGroup>
