@@ -54,42 +54,36 @@ void InterProcessCS::EnterCriticalSection()
 	if (!TryEnterCriticalSection())
 	{
 		DWORD threadId = GetCurrentThreadId();
-		if (InterlockedIncrement(&status->LockCount) == 1)
+		if (InterlockedIncrement(&status->LockCount) > 1)
 		{
-			TakeByThread(threadId);
-		}
-		else
-		{
-			if (status->OwningThread == threadId)
+			if (status->OwningThread != threadId)
 			{
-				InterlockedIncrement(&status->RecursionCount);
+				WaitForSingleObject(status->LockEvent, INFINITE);
 			}
 			else
 			{
-				WaitForSingleObject(status->LockEvent, INFINITE);
-				TakeByThread(threadId);
+				InterlockedIncrement(&status->RecursionCount);
+				return;
 			}
 		}
+		TakeByThread(threadId);
 	}
 }
 
 BOOL InterProcessCS::TryEnterCriticalSection() 
 {
-	DWORD dwThreadId = GetCurrentThreadId();
+	DWORD threadId = GetCurrentThreadId();
 	BOOL isCurrentThreadOwn = FALSE; 
 	DWORD SpinCount = status->SpinCount; 
 	do {
 		if (InterlockedCompareExchange(&status->LockCount, 1, 0) == 0)
 		{
 			isCurrentThreadOwn = TRUE;
-		}
-		if (isCurrentThreadOwn)
-		{
-			TakeByThread(dwThreadId);
+			TakeByThread(threadId);
 		}
 		else 
 		{
-			if (status->OwningThread == dwThreadId)
+			if (status->OwningThread == threadId)
 			{
 				InterlockedIncrement(&status->LockCount);
 				InterlockedIncrement(&status->RecursionCount);
@@ -106,17 +100,18 @@ void InterProcessCS::LeaveCriticalSection()
 {
 	if (status->OwningThread == GetCurrentThreadId())
 	{
-		if (InterlockedDecrement(&status->RecursionCount) <= 0)
+		DWORD currentRecursion = InterlockedDecrement(&status->RecursionCount);
+		if (currentRecursion <= 0)
 		{
-			status->OwningThread = 0;
-			if (InterlockedDecrement(&status->LockCount) > 0)
+			InterlockedExchange(&status->OwningThread, 0);
+		}
+		DWORD currentLocks = InterlockedDecrement(&status->LockCount);
+		if (currentLocks > 0)
+		{
+			if (currentRecursion <= 0)
 			{
 				SetEvent(status->LockEvent);
 			}
-		}
-		else
-		{
-			InterlockedDecrement(&status->LockCount);
 		}
 	}	
 }

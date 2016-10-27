@@ -73,6 +73,13 @@ int wmain(int argc, wchar_t *argv[])
 				0,
 				BUF_SIZE);
 
+			ics->EnterCriticalSection();
+			ics->EnterCriticalSection();
+			ics->EnterCriticalSection();
+			ics->LeaveCriticalSection();
+			ics->LeaveCriticalSection();
+			ics->LeaveCriticalSection();
+
 			int values[ARRAY_SIZE];
 			for (int i = 0; i < ARRAY_SIZE; i++)
 			{
@@ -82,15 +89,15 @@ int wmain(int argc, wchar_t *argv[])
 			CopyMemory((PVOID)pBuf, values, sizeof(int) * ARRAY_SIZE);
 			printf("\nCreated\n");
 	
-			STARTUPINFO si1;
-			ZeroMemory(&si1, sizeof(STARTUPINFOA));
-			PROCESS_INFORMATION pi1;
-			CreateProcess(L"Lab33.exe", L" 1", NULL, NULL, FALSE, 0, NULL, NULL, &si1, &pi1);
+			STARTUPINFO siFirst;
+			ZeroMemory(&siFirst, sizeof(STARTUPINFOA));
+			PROCESS_INFORMATION piFirst;
+			CreateProcess(L"Lab33.exe", L" 1", NULL, NULL, FALSE, 0, NULL, NULL, &siFirst, &piFirst);
 	
-			STARTUPINFO si2;
-			ZeroMemory(&si2, sizeof(STARTUPINFOA));
-			PROCESS_INFORMATION pi2;
-			CreateProcess(L"Lab33.exe", L" 2", NULL, NULL, FALSE, 0, NULL, NULL, &si2, &pi2);
+			STARTUPINFO siSecond;
+			ZeroMemory(&siSecond, sizeof(STARTUPINFOA));
+			PROCESS_INFORMATION piSecond;
+			CreateProcess(L"Lab33.exe", L" 2", NULL, NULL, FALSE, 0, NULL, NULL, &siSecond, &piSecond);
 	
 			getch();
 			UnmapViewOfFile(pBuf);
