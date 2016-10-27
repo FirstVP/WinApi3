@@ -33,7 +33,7 @@ void ProcessProcedure()
 
 	for (int j = 0; j < TRIES; j++)
 	{
-		ics->Enter();
+		ics->EnterCriticalSection();
 		for (int i = 0; i < ARRAY_SIZE; i++)
 		{
 			values[i] = values[i] + 1;
@@ -43,7 +43,7 @@ void ProcessProcedure()
 			printf("%d ", values[i]);
 		}
 		printf("\n%d\n", GetCurrentProcessId());
-		ics->Leave();
+		ics->LeaveCriticalSection();
 		Sleep(10);
 	}
 
@@ -67,28 +67,12 @@ int wmain(int argc, wchar_t *argv[])
 				0,                      
 				BUF_SIZE,                
 				fileOfValuesName);
-	
-			if (hMapFile == NULL)
-			{
-				_tprintf(TEXT("Could not create file mapping object (%d).\n"),
-					GetLastError());
-				return 1;
-			}
+
 			pBuf = (LPTSTR)MapViewOfFile(hMapFile,
 				FILE_MAP_ALL_ACCESS,
 				0,
 				0,
 				BUF_SIZE);
-	
-			if (pBuf == NULL)
-			{
-				_tprintf(TEXT("Could not map view of file (%d).\n"),
-					GetLastError());
-	
-				CloseHandle(hMapFile);
-	
-				return 1;
-			}
 
 			int values[ARRAY_SIZE];
 			for (int i = 0; i < ARRAY_SIZE; i++)
@@ -111,7 +95,6 @@ int wmain(int argc, wchar_t *argv[])
 	
 			getch();
 			UnmapViewOfFile(pBuf);
-	
 			CloseHandle(hMapFile);
 			return 0;
 	

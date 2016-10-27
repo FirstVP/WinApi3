@@ -2,110 +2,111 @@
 #include "InterProcessCS.h"
 #include "stdio.h"
 #define BUFFER_OBJECT_NAME_SIZE 256
-char* InterProcessCS::ConstructObjectName(char* pszResult,
-	char* pszPrefix, char* pszName) {
-	pszResult[0] = 0;
-	wsprintfA(pszResult, "%s%s", pszPrefix, pszName);
-	return(pszResult);
+char* InterProcessCS::GenerateName(char* result, char* typeName, char* name) 
+{
+	result[0] = 0;
+	wsprintfA(result, "%s%s", typeName, name);
+	return(result);
 }
 
-InterProcessCS::InterProcessCS(char* pszName, DWORD dwSpinCount) {
-	char szResult[BUFFER_OBJECT_NAME_SIZE];
-	ConstructObjectName(szResult, "EVENT", pszName);
-	m_hevt = CreateEventA(NULL, FALSE, FALSE, szResult);
+InterProcessCS::InterProcessCS(char* name, DWORD spinCount)
+{
+	char result[BUFFER_OBJECT_NAME_SIZE];
 
-	ConstructObjectName(szResult, "FILE", pszName);
-	m_hfm = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL,
-		PAGE_READWRITE, 0, sizeof(*m_psi), szResult);
-
-	m_psi = (PSHAREDINFO)MapViewOfFile(m_hfm,
+	GenerateName(result, "FILE", name);
+	mappedFile = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL,
+		PAGE_READWRITE, 0, sizeof(*status), result);
+	status = (STATUS*)MapViewOfFile(mappedFile,
 		FILE_MAP_WRITE, 0, 0, 0);
 
-	SetSpinCount(dwSpinCount);
-	printf ("%d", m_psi->m_dwSpinCount);
+	GenerateName(result, "EVENT", name);
+	status->LockEvent = CreateEventA(NULL, FALSE, FALSE, result);
+
+	SetSpinCount(spinCount);
+	printf ("%d", status->SpinCount);
 }
 
 
 InterProcessCS::~InterProcessCS()
 {
-	CloseHandle(m_hevt);
-	UnmapViewOfFile(m_psi);
-	CloseHandle(m_hfm);
+	CloseHandle(status->LockEvent);
+	UnmapViewOfFile(status);
+	CloseHandle(mappedFile);
 }
 
-void InterProcessCS::SetSpinCount(DWORD dwSpinCount)
+void InterProcessCS::SetSpinCount(DWORD spinCount)
 {
-	InterlockedExchange(&m_psi->m_dwSpinCount,
-		(LONG)dwSpinCount);
+	InterlockedExchange(&status->SpinCount, (LONG)spinCount);
 }
 
-void InterProcessCS::Enter() {
-
-	if (TryEnter())
-		return; 
-
-	DWORD dwThreadId = GetCurrentThreadId();
-	if (InterlockedIncrement(&m_psi->m_lLockCount) == 1) {
-		// оптекс не занят, пусть этот поток захватит его разок
-		m_psi->m_dwThreadId = dwThreadId;
-		m_psi->m_lRecurseCount = 1;
-	}
-	else {
-		if (m_psi->m_dwThreadId == dwThreadId) {
-			// если оптекс принадлежит данному потоку, захватываем его еще раз
-			m_psi->m_lRecurseCount++;
-		}
-		else {
-			// оптекс принадлежит другому потоку, ждем
-			WaitForSingleObject(m_hevt, INFINITE);
-			// оптекс не занят, пусть этот поток захватит его разок
-			m_psi->m_dwThreadId = dwThreadId;
-			m_psi->m_lRecurseCount = 1;
-		}
-	}
+void InterProcessCS::TakeByThread(DWORD threadId)
+{
+	status->OwningThread = threadId;
+	status->RecursionCount = 1;
 }
 
-BOOL InterProcessCS::TryEnter() {
-	DWORD dwThreadId = GetCurrentThreadId();
-	BOOL fThisThreadOwnsTheOptex = FALSE; 
-	DWORD dwSpinCount = m_psi->m_dwSpinCount; 
-	do {
-		// если счетчик числа блокировок = 0, оптекс не занят,
-		// и мы можем захватить его
-		fThisThreadOwnsTheOptex = (0 ==
-			InterlockedCompareExchange(&m_psi->m_lLockCount, 1, 0));
-		if (fThisThreadOwnsTheOptex) {
-			// оптекс не занят, пусть этот поток захватит его разок
-			m_psi->m_dwThreadId = dwThreadId;
-			m_psi->m_lRecurseCount = 1;
+void InterProcessCS::EnterCriticalSection() 
+{
+	if (!TryEnterCriticalSection())
+	{
+		DWORD dwThreadId = GetCurrentThreadId();
+		if (InterlockedIncrement(&status->LockCount) == 1)
+		{
+			TakeByThread(dwThreadId);
 		}
-		else {
-			if (m_psi->m_dwThreadId == dwThreadId) {
-				// если оптекс принадлежит данному потоку, захватываем его еще раз
-				InterlockedIncrement(&m_psi->m_lLockCount);
-				m_psi->m_lRecurseCount++;
-				fThisThreadOwnsTheOptex = TRUE;
+		else
+		{
+			if (status->OwningThread == dwThreadId)
+			{
+				InterlockedIncrement(&status->RecursionCount);
+			}
+			else
+			{
+				WaitForSingleObject(status->LockEvent, INFINITE);
+				TakeByThread(dwThreadId);
 			}
 		}
-	} while (!fThisThreadOwnsTheOptex && (dwSpinCount-- > 0));
-
-	return(fThisThreadOwnsTheOptex);
+	}
 }
 
-void InterProcessCS::Leave() {
-
-	// уменьшаем счетчик числа захватов оптекса данным потоком
-	if (--m_psi->m_lRecurseCount > 0) {
-		// оптекс все еще принадлежит нам
-		InterlockedDecrement(&m_psi->m_lLockCount);
-	}
-	else {
-		// оптекс нам больше не принадлежит
-		m_psi->m_dwThreadId = 0;
-		if (InterlockedDecrement(&m_psi->m_lLockCount) > 0) {
-			// если оптекс ждут другие потоки,
-			// событие с автосбросом пробудит один из них
-			SetEvent(m_hevt);
+BOOL InterProcessCS::TryEnterCriticalSection() 
+{
+	DWORD dwThreadId = GetCurrentThreadId();
+	BOOL isCurrentThreadOwn = FALSE; 
+	DWORD SpinCount = status->SpinCount; 
+	do {
+		isCurrentThreadOwn = (0 ==
+			InterlockedCompareExchange(&status->LockCount, 1, 0));
+		if (isCurrentThreadOwn)
+		{
+			TakeByThread(dwThreadId);
 		}
+		else 
+		{
+			if (status->OwningThread == dwThreadId)
+			{
+				InterlockedIncrement(&status->LockCount);
+				status->RecursionCount++;
+				isCurrentThreadOwn = TRUE;
+			}
+		}
+	} while (!isCurrentThreadOwn && (SpinCount-- > 0));
+
+	return(isCurrentThreadOwn);
+}
+
+void InterProcessCS::LeaveCriticalSection()
+{
+	if (InterlockedDecrement(&status->RecursionCount) <= 0)
+	{
+		status->OwningThread = 0;
+		if (InterlockedDecrement(&status->LockCount) > 0)
+		{
+			SetEvent(status->LockEvent);
+		}
+	}
+	else
+	{
+		InterlockedDecrement(&status->LockCount);
 	}
 }

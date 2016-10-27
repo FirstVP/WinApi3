@@ -5,20 +5,21 @@ public:
 	InterProcessCS(char* pszName, DWORD dwSpinCount);
 	~InterProcessCS();
 	void SetSpinCount(DWORD dwSpinCount);
-	void Enter();
-	BOOL TryEnter();
-	void Leave();
+	void EnterCriticalSection();
+	BOOL TryEnterCriticalSection();
+	void LeaveCriticalSection();
 private:
 	typedef struct {
-		DWORD m_dwSpinCount;
-		long m_lLockCount;
-		DWORD m_dwThreadId;
-		long m_lRecurseCount;
-	} SHAREDINFO, *PSHAREDINFO;
-	HANDLE m_hevt;
-	HANDLE m_hfm;
-	PSHAREDINFO m_psi;
+		DWORD SpinCount;
+		long LockCount;
+		DWORD OwningThread;
+		long RecursionCount;
+		HANDLE LockEvent;
+	} STATUS;
+	HANDLE mappedFile;
+	STATUS* status;
 private:
-	char* ConstructObjectName(char* pszResult,
+	char* GenerateName(char* pszResult,
 		char* pszPrefix, char* pszName);
+	void TakeByThread(DWORD threadId);
 };
