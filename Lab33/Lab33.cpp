@@ -16,7 +16,6 @@ InterProcessCS* ics;
 
 void ProcessProcedure()
 {
-	printf("\nCreated first\n");
 	HANDLE hMap;
 
 	hMap = OpenFileMapping(

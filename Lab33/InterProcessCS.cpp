@@ -22,8 +22,12 @@ InterProcessCS::InterProcessCS(char* name, DWORD spinCount)
 	GenerateName(result, "EVENT", name);
 	status->LockEvent = CreateEventA(NULL, FALSE, FALSE, result);
 
+	status->LockCount = 0;
+	status->OwningThread = 0;
+	status->RecursionCount = 0;
+	status->SpinCount = 0;
+
 	SetSpinCount(spinCount);
-	printf ("%d", status->SpinCount);
 }
 
 
@@ -41,29 +45,29 @@ void InterProcessCS::SetSpinCount(DWORD spinCount)
 
 void InterProcessCS::TakeByThread(DWORD threadId)
 {
-	status->OwningThread = threadId;
-	status->RecursionCount = 1;
+	InterlockedExchange(&status->OwningThread, threadId);
+	InterlockedExchange(&status->RecursionCount, 1);
 }
 
 void InterProcessCS::EnterCriticalSection() 
 {
 	if (!TryEnterCriticalSection())
 	{
-		DWORD dwThreadId = GetCurrentThreadId();
+		DWORD threadId = GetCurrentThreadId();
 		if (InterlockedIncrement(&status->LockCount) == 1)
 		{
-			TakeByThread(dwThreadId);
+			TakeByThread(threadId);
 		}
 		else
 		{
-			if (status->OwningThread == dwThreadId)
+			if (status->OwningThread == threadId)
 			{
 				InterlockedIncrement(&status->RecursionCount);
 			}
 			else
 			{
 				WaitForSingleObject(status->LockEvent, INFINITE);
-				TakeByThread(dwThreadId);
+				TakeByThread(threadId);
 			}
 		}
 	}
@@ -75,8 +79,10 @@ BOOL InterProcessCS::TryEnterCriticalSection()
 	BOOL isCurrentThreadOwn = FALSE; 
 	DWORD SpinCount = status->SpinCount; 
 	do {
-		isCurrentThreadOwn = (0 ==
-			InterlockedCompareExchange(&status->LockCount, 1, 0));
+		if (InterlockedCompareExchange(&status->LockCount, 1, 0) == 0)
+		{
+			isCurrentThreadOwn = TRUE;
+		}
 		if (isCurrentThreadOwn)
 		{
 			TakeByThread(dwThreadId);
@@ -86,27 +92,31 @@ BOOL InterProcessCS::TryEnterCriticalSection()
 			if (status->OwningThread == dwThreadId)
 			{
 				InterlockedIncrement(&status->LockCount);
-				status->RecursionCount++;
+				InterlockedIncrement(&status->RecursionCount);
 				isCurrentThreadOwn = TRUE;
 			}
 		}
-	} while (!isCurrentThreadOwn && (SpinCount-- > 0));
+		SpinCount--;
+	} while (!isCurrentThreadOwn && (SpinCount > 0));
 
 	return(isCurrentThreadOwn);
 }
 
 void InterProcessCS::LeaveCriticalSection()
 {
-	if (InterlockedDecrement(&status->RecursionCount) <= 0)
+	if (status->OwningThread == GetCurrentThreadId())
 	{
-		status->OwningThread = 0;
-		if (InterlockedDecrement(&status->LockCount) > 0)
+		if (InterlockedDecrement(&status->RecursionCount) <= 0)
 		{
-			SetEvent(status->LockEvent);
+			status->OwningThread = 0;
+			if (InterlockedDecrement(&status->LockCount) > 0)
+			{
+				SetEvent(status->LockEvent);
+			}
 		}
-	}
-	else
-	{
-		InterlockedDecrement(&status->LockCount);
-	}
+		else
+		{
+			InterlockedDecrement(&status->LockCount);
+		}
+	}	
 }
